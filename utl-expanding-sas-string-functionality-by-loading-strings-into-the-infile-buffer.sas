@@ -8,10 +8,20 @@ PROBLEM
 
 Input string operations to parse messy four word  string into name grade and weight
 
-         CONTENTS
+  CONTENTS
 
-           1 sas datastep solution
-           2 sas load infile macro
+    1 sas load infile macro
+    2 sas datastep solution
+
+    3 Barts improved loadinfileB macro
+      Bartosz Jablonski
+      yabwon@gmail.com
+      https://github.com/yabwon
+    4 improved loadinfile macro example
+
+original infile trick;
+https://tinyurl.com/yjzm497y
+https://communities.sas.com/t5/SAS-Programming/How-to-delimit-large-dataset-28-Million-rows-into-700-variables/m-p/487676
 
 github
 https://tinyurl.com/3j3npc6s
@@ -36,10 +46,28 @@ Most of my post are the result of standing on the shoulders of others.
 /**************************************************************************************************************************/
 /*                               |                                                      |                                 */
 /*                               |                                                      |                                 */
-/*         INPUT                 |  PROCESS                                             |     OUTPUT                      */
-/*         =====                 |  =======                                             |     ======                      */
+/*         INPUT                 |  PROCESSES                                           |     OUTPUT                      */
+/*         =====                 |  =========                                           |     ======                      */
 /*                               |                                                      |                                 */
-/*  SD1.HAVE                     | 1 SAS DATASTEP SOLUTION                              |                                 */
+/*                               | 1 SAS LOAD INFILE MACRO                              |                                 */
+/*                               | =======================                              |                                 */
+/*                               |                                                      |                                 */
+/*                               | %macro loadinfile(str)                               |                                 */
+/*                               |   /des="load string into the infile buffer";         |                                 */
+/*                               |  %dosubl('                                           |                                 */
+/*                               |    data _null_;                                      |                                 */
+/*                               |      file "%sysfunc(getoption(WORK))/tmp.txt";       |                                 */
+/*                               |      put "*";                                        |                                 */
+/*                               |    run;quit;                                         |                                 */
+/*                               |    ');                                               |                                 */
+/*                               |   infile  "%sysfunc(getoption(WORK))/tmp.txt";       |                                 */
+/*                               |   input @;                                           |                                 */
+/*                               |   _infile_ = &str;                                   |                                 */
+/*                               | %mend loadinfile;                                    |                                 */
+/*                               |                                                      |                                 */
+/* -----------------------------------------------------------------------------------------------------------------------*/
+/*                               |                                                      |                                 */
+/*  SD1.HAVE                     | 2 SAS DATASTEP SOLUTION                              |                                 */
 /*                               | =======================                              | WANT.SAS&BDAT                   */
 /*          STR                  |                                                      |                                 */
 /*                               | data want;                                           |                                 */
@@ -63,26 +91,86 @@ Most of my post are the result of standing on the shoulders of others.
 /*                               |   keep first last grade weight;                      |                                 */
 /*                               | run;quit;                                            |                                 */
 /*                               |                                                      |                                 */
+/*------------------------------------------------------------------------------------------------------------------------*/
 /*                               |                                                      |                                 */
-/*                               | 2 SAS LOAD INFILE MACRO                              |                                 */
-/*                               | =======================                              |                                 */
+/*                               | 3 BARTS IMPROVED LOADINFILEB MACRO                   |                                 */
+/*                               | ==================================                   |                                 */
 /*                               |                                                      |                                 */
-/*                               | %macro loadinfile(str)                               |                                 */
+/*                               | %macro loadinfileB(str,lrecl=32767)                  |                                 */
 /*                               |   /des="load string into the infile buffer";         |                                 */
-/*                               |  %dosubl('                                           |                                 */
-/*                               |    data _null_;                                      |                                 */
-/*                               |      file "%sysfunc(getoption(WORK))/tmp.txt";       |                                 */
-/*                               |      put "*";                                        |                                 */
-/*                               |    run;quit;                                         |                                 */
-/*                               |    ');                                               |                                 */
-/*                               |   infile  "%sysfunc(getoption(WORK))/tmp.txt";       |                                 */
-/*                               |   input @;                                           |                                 */
-/*                               |   _infile_ = &str;                                   |                                 */
-/*                               | %mend loadinfile;                                    |                                 */
+/*                               |  %local rc ff filrf fid;                             |                                 */
+/*                               |  %let ff = %sysfunc(datetime());                     |                                 */
+/*                               |  %let rc=%sysfunc(filename(filrf                     |                                 */
+/*                               |    ,%sysfunc(pathname(WORK))/empty&ff..txt));        |                                 */
+/*                               |  %let fid=%sysfunc(fopen(&filrf., a));               |                                 */
+/*                               |  %if &fid. > 0 %then                                 |                                 */
+/*                               |    %do;                                              |                                 */
+/*                               |       %let rc=%sysfunc(fwrite(&fid));                |                                 */
+/*                               |       %let rc=%sysfunc(fclose(&fid));                |                                 */
+/*                               |       infile                                         |                                 */
+/*                               |         "%sysfunc(pathname(WORK))/empty&ff..txt"     |                                 */
+/*                               |          lrecl=&lrecl.;                              |                                 */
+/*                               |       input @; _infile_ = &str;                      |                                 */
+/*                               |    %end;                                             |                                 */
+/*                               |  %else                                               |                                 */
+/*                               |     %do;                                             |                                 */
+/*                               |       putLOG "ERROR:&sysmacroname. Something";       |                                 */
+/*                               |       putlog "went wrong with the temp file...";     |                                 */
+/*                               |       stop;                                          |                                 */
+/*                               |     %end;                                            |                                 */
+/*                               | %mend loadinfileB;                                   |                                 */
+/*                               |                                                      |                                 */
+/*-------------------------------|------------------------------------------------------|---------------------------------*/
+/*                               |                                                      |                                 */
+/* DIFFERENT DATA EXAMPLE        | 4 IMPROVED LOADINFILE EXAMPLE DIFFERENT INPUT        |                                 */
+/*                               |==============================================        |                                 */
+/*                               |                                                      |                                 */
+/*          STR                  | data want(drop=str);                                 |  FIRST LAST   AGE  TEST         */
+/*                               |   set have;                                          |                                 */
+/*  John Carry   66              |   informat first last $8. age 2.;                    |  John  Carry   66  Bart         */
+/*  Andy NYC     32              |                                                      |  Andy  NYC     32  Bart         */
+/*                               |   * load _infile_ buffer with variable str;          |                                 */
+/*                               |   %loadinfileB(str, lrecl=128);                      |                                 */
+/*                               |                                                      |                                 */
+/*  DATA  have;                  |   input first last age & @;                          |                                 */
+/*    input str $64.;            |                                                      |                                 */
+/*  cards4;                      |   test = "Bart";                                     |                                 */
+/*  John Carry   66              |   * restart the buffer;                              |                                 */
+/*  Andy NYC     32              |   input @1 @@;                                       |                                 */
+/*  ;;;;                         | run;quit;                                            |                                 */
+/*  run;quit;                    |                                                      |                                 */
 /*                               |                                                      |                                 */
 /**************************************************************************************************************************/
 
-/*                   _
+
+/*                  _                 _   _        __ _ _
+/ | ___  __ _ ___  | | ___   __ _  __| | (_)_ __  / _(_) | ___  _ __ ___   __ _  ___ _ __ ___
+| |/ __|/ _` / __| | |/ _ \ / _` |/ _` | | | `_ \| |_| | |/ _ \| `_ ` _ \ / _` |/ __| `__/ _ \
+| |\__ \ (_| \__ \ | | (_) | (_| | (_| | | | | | |  _| | |  __/| | | | | | (_| | (__| | | (_) |
+|_||___/\__,_|___/ |_|\___/ \__,_|\__,_| |_|_| |_|_| |_|_|\___||_| |_| |_|\__,_|\___|_|  \___/
+
+*/
+
+%macro loadinfile(str)
+  /des="load string into the infile buffer";
+ %dosubl('
+   data _null_;
+     file "%sysfunc(getoption(WORK))/tmp.txt";
+     put "*";
+   run;quit;
+   ');
+  infile  "%sysfunc(getoption(WORK))/tmp.txt";
+  input @;
+  _infile_ = &str;
+
+%mend loadinfile;
+
+/*___                        _       _            _                        _       _   _
+|___ \   ___  __ _ ___    __| | __ _| |_ __ _ ___| |_ ___ _ __   ___  ___ | |_   _| |_(_) ___  _ __
+  __) | / __|/ _` / __|  / _` |/ _` | __/ _` / __| __/ _ \ `_ \ / __|/ _ \| | | | | __| |/ _ \| `_ \
+ / __/  \__ \ (_| \__ \ | (_| | (_| | || (_| \__ \ ||  __/ |_) |\__ \ (_) | | |_| | |_| | (_) | | | |
+|_____| |___/\__,_|___/  \__,_|\__,_|\__\__,_|___/\__\___| .__/ |___/\___/|_|\__,_|\__|_|\___/|_| |_|
+                     _                                   |_|
 (_)_ __  _ __  _   _| |_
 | | `_ \| `_ \| | | | __|
 | | | | | |_) | |_| | |_
@@ -102,27 +190,18 @@ data sd1.have;
 run;quit;
 
 /**************************************************************************************************************************/
-/*                                                                                                                        */
-/*                                                                                                                        */
-/*         INPUT                                                                                                          */
-/*         =====                                                                                                          */
-/*                                                                                                                        */
 /*  SD1.HAVE                                                                                                              */
-/*                                                                                                                        */
 /*          STR                                                                                                           */
-/*                                                                                                                        */
 /*  Jhon Austin B 100kg                                                                                                   */
 /*  Mick Gray C 110kg                                                                                                     */
 /*  Tom Jef A30kg                                                                                                         */
-/*                                                                                                                        */
 /**************************************************************************************************************************/
-
-/*                       _       _       _
-/ |  ___  __ _ ___    __| | __ _| |_ ___| |_ ___ _ __
-| | / __|/ _` / __|  / _` |/ _` | __/ __| __/ _ \ `_ \
-| | \__ \ (_| \__ \ | (_| | (_| | |_\__ \ ||  __/ |_) |
-|_| |___/\__,_|___/  \__,_|\__,_|\__|___/\__\___| .__/
-                                                |_|
+/*
+ _ __  _ __ ___   ___ ___  ___ ___
+| `_ \| `__/ _ \ / __/ _ \/ __/ __|
+| |_) | | | (_) | (_|  __/\__ \__ \
+| .__/|_|  \___/ \___\___||___/___/
+|_|
 */
 
 proc datasets lib=work nolist nodetails;
@@ -151,40 +230,78 @@ data want; ;
 run;quit;
 
 /**************************************************************************************************************************/
+/*  FIRST    LAST      GRADE    WEIGHT                                                                                    */
 /*                                                                                                                        */
-/* WANT.SAS7BDAT                                                                                                          */
-/*                                                                                                                        */
-/*                                                                                                                        */
-/* FIRST LAST   GRADE  WEIGHT                                                                                             */
-/*                                                                                                                        */
-/* Jhon  Austin   B     100kg                                                                                             */
-/* Mick  Gray     C     110kg                                                                                             */
-/* Tom   Jef      A      30kg                                                                                             */
-/*                                                                                                                        */
-/*                                                                                                                        */
+/*  Jhon     Austin      B      100kg                                                                                     */
+/*  Mick     Gray        C      110kg                                                                                     */
+/*  Tom      Jef         A      30kg                                                                                      */
 /**************************************************************************************************************************/
 
-/*___                    _                 _   _        __ _ _
-|___ \   ___  __ _ ___  | | ___   __ _  __| | (_)_ __  / _(_) | ___  _ __ ___   __ _  ___ _ __ ___
-  __) | / __|/ _` / __| | |/ _ \ / _` |/ _` | | | `_ \| |_| | |/ _ \| `_ ` _ \ / _` |/ __| `__/ _ \
- / __/  \__ \ (_| \__ \ | | (_) | (_| | (_| | | | | | |  _| | |  __/| | | | | | (_| | (__| | | (_) |
-|_____| |___/\__,_|___/ |_|\___/ \__,_|\__,_| |_|_| |_|_| |_|_|\___||_| |_| |_|\__,_|\___|_|  \___/
-
+/*____   _                _         _                                        _  _                 _ _        __ _ _      ____
+|___ /  | |__   __ _ _ __| |_ ___  (_)_ __ ___  _ __  _ __ _____   _____  __| || | ___   __ _  __| (_)_ __  / _(_) | ___| __ )
+  |_ \  | `_ \ / _` | `__| __/ __| | | `_ ` _ \| `_ \| `__/ _ \ \ / / _ \/ _` || |/ _ \ / _` |/ _` | | `_ \| |_| | |/ _ \  _ \
+ ___) | | |_) | (_| | |  | |_\__ \ | | | | | | | |_) | | | (_) \ V /  __/ (_| || | (_) | (_| | (_| | | | | |  _| | |  __/ |_) |
+|____/  |_.__/ \__,_|_|   \__|___/ |_|_| |_| |_| .__/|_|  \___/ \_/ \___|\__,_||_|\___/ \__,_|\__,_|_|_| |_|_| |_|_|\___|____/
+                                               |_|
 */
 
-%macro loadinfile(str)
+filename ft15f001 "c:/oto/loadinfileb.sas";
+parmcards4;
+%macro loadinfileB(str,lrecl=32767)
   /des="load string into the infile buffer";
- %dosubl('
-   data _null_;
-     file "%sysfunc(getoption(WORK))/tmp.txt";
-     put "*";
-   run;quit;
-   ');
-  infile  "%sysfunc(getoption(WORK))/tmp.txt";
-  input @;
-  _infile_ = &str;
+ %local rc ff filrf fid;
+ %let ff = %sysfunc(datetime());
+ %let rc=%sysfunc(filename(filrf
+   ,%sysfunc(pathname(WORK))/empty&ff..txt));
+ %let fid=%sysfunc(fopen(&filrf., a));
+ %if &fid. > 0 %then
+   %do;
+      %let rc=%sysfunc(fwrite(&fid));
+      %let rc=%sysfunc(fclose(&fid));
+      infile
+        "%sysfunc(pathname(WORK))/empty&ff..txt"
+         lrecl=&lrecl.;
+      input @; _infile_ = &str;
+   %end;
+ %else
+    %do;
+      putLOG "ERROR:&sysmacroname. Something";
+      putlog "went wrong with the temp file...";
+      stop;
+    %end;
+%mend loadinfileB;
+;;;;
+run;quit;
 
-%mend loadinfile;
+/*  _     _                                        _  _                 _ _        __ _ _                                      _
+| || |   (_)_ __ ___  _ __  _ __ _____   _____  __| || | ___   __ _  __| (_)_ __  / _(_) | ___   _____  ____ _ _ __ ___  _ __ | | ___
+| || |_  | | `_ ` _ \| `_ \| `__/ _ \ \ / / _ \/ _` || |/ _ \ / _` |/ _` | | `_ \| |_| | |/ _ \ / _ \ \/ / _` | `_ ` _ \| `_ \| |/ _ \
+|__   _| | | | | | | | |_) | | | (_) \ V /  __/ (_| || | (_) | (_| | (_| | | | | |  _| | |  __/|  __/>  < (_| | | | | | | |_) | |  __/
+   |_|   |_|_| |_| |_| .__/|_|  \___/ \_/ \___|\__,_||_|\___/ \__,_|\__,_|_|_| |_|_| |_|_|\___| \___/_/\_\__,_|_| |_| |_| .__/|_|\___|
+                     |_|                                                                                                |_|
+*/
+
+data want(drop=str);
+  set have;
+  informat first last $8. age 2.;
+
+  * load _infile_ buffer with variable str;
+  %loadinfileB(str, lrecl=128);
+
+  input first last age & @;
+
+  test = "Bart";
+  * restart the buffer;
+  input @1 @@;
+run;quit;
+
+/**************************************************************************************************************************/
+/*  FIRST    LAST     AGE    TEST                                                                                         */
+/*                                                                                                                        */
+/*  John     Carry     66    Bart                                                                                         */
+/*  Andy     NYC       32    Bart                                                                                         */
+/**************************************************************************************************************************/
+
 /*              _
   ___ _ __   __| |
  / _ \ `_ \ / _` |
@@ -192,3 +309,4 @@ run;quit;
  \___|_| |_|\__,_|
 
 */
+
